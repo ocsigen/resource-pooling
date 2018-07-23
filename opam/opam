@@ -1,0 +1,32 @@
+opam-version: "1.2"
+name: "resource-pooling"
+version: "0.1"
+maintainer: "Jan Rochel <jan@besport.com>"
+authors: [ "Jan Rochel (BeSport)" ]
+license: "MIT"
+homepage: "https://github.com/besport/resource-pooling"
+dev-repo: "https://github.com/besport/resource-pooling.git"
+bug-reports: "https://github.com/besport/resource-pooling/issues"
+build: [
+  ["oasis" "setup"]
+  ["ocaml" "setup.ml" "-configure" "--prefix" prefix]
+  ["ocaml" "setup.ml" "-build"]
+]
+install: ["ocaml" "setup.ml" "-install"]
+remove: [
+  ["ocamlfind" "remove" "resource-pooling"]
+]
+build-test: [
+  ["oasis" "setup"]
+  ["ocaml" "setup.ml" "-configure" "--enable-tests"]
+  ["ocaml" "setup.ml" "-build"]
+  ["ocaml" "setup.ml" "-test"]
+]
+depends: [
+  "batteries"
+  "lwt"
+  ("oasis" {build & >= "0.4.7"} | "oasis-mirage" {build & >= "0.4.7"})
+  "ocamlbuild" {build}
+  "ocamlfind" {build}
+]
+available: [ ocaml-version >= "4.01" ]

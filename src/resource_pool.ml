@@ -1,8 +1,3 @@
-(* This file is part of Lwt, released under the MIT license. See LICENSE.md for
-   details, or visit https://github.com/ocsigen/lwt/blob/master/LICENSE.md. *)
-
-
-
 (* [Lwt_sequence] is deprecated – we don't want users outside Lwt using it.
    However, it is still used internally by Lwt. So, briefly disable warning 3
    ("deprecated"), and create a local, non-deprecated alias for
