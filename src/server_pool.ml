@@ -1,11 +1,9 @@
 (**
-
-This module is built around [Resource_pool]. While a pool of type [Resource_pool.t]
-manages a number of resources, here we manage a cluster of such pools. A typical
-use case would be a cluster of servers, where for each server we maintain a
-number of connections. A user of this module can call [use] to access one of the
-connections, which are served in a round-robin fashion.
-
+This module is built around [Resource_pool]. While a pool of type
+[Resource_pool.t] manages a number of resources, here we manage a cluster of
+such pools. A typical use case would be a cluster of servers, where for each
+server we maintain a number of connections. A user of this module can call [use]
+to access one of the connections, which are served in a round-robin fashion.
 *)
 
 [@@@ocaml.warning "+A-44-48"]
