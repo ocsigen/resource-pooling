@@ -1,3 +1,5 @@
+[@@@ocaml.warning "+A-44-48"]
+
 (* [Lwt_sequence] is deprecated – we don't want users outside Lwt using it.
    However, it is still used internally by Lwt. So, briefly disable warning 3
    ("deprecated"), and create a local, non-deprecated alias for

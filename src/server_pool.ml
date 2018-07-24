@@ -8,6 +8,8 @@ connections, which are served in a round-robin fashion.
 
 *)
 
+[@@@ocaml.warning "+A-44-48"]
+
 open BatPervasives
 module List = BatList
 module Hashtbl = BatHashtbl
