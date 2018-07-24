@@ -10,7 +10,7 @@ Description:            The module Lwt_pool from the lwt package implements
                         cluster of servers).
 Authors:                Jan Rochel (BeSport)
 Maintainers:            Jan Rochel <jan@besport.com>
-Homepage:               https://github.com/besport/resource-pooling
+Homepage:               https://github.com/ocsigen/resource-pooling
 License:                MIT
 BuildTools:             ocamlbuild
 Plugins:                DevFiles (0.4), META (0.4)
@@ -18,9 +18,9 @@ OCamlVersion:           >= 4.01
 
 SourceRepository master
   Type: git
-  Location: https://github.com/besport/resource-pooling.git
+  Location: https://github.com/ocsigen/resource-pooling.git
   Branch: master
-  Browser: https://github.com/besport/resource-pooling
+  Browser: https://github.com/ocsigen/resource-pooling
 
 Library "resource-pooling"
   Path: src

@@ -4,9 +4,9 @@ version: "0.1"
 maintainer: "Jan Rochel <jan@besport.com>"
 authors: [ "Jan Rochel (BeSport)" ]
 license: "MIT"
-homepage: "https://github.com/besport/resource-pooling"
+homepage: "https://github.com/ocsigen/resource-pooling"
 dev-repo: "https://github.com/besport/resource-pooling.git"
-bug-reports: "https://github.com/besport/resource-pooling/issues"
+bug-reports: "https://github.com/ocsigen/resource-pooling/issues"
 build: [
   ["oasis" "setup"]
   ["ocaml" "setup.ml" "-configure" "--prefix" prefix]
