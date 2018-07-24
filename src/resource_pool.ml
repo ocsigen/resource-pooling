@@ -32,16 +32,18 @@ type 'a t = {
   (* Promise resolvers waiting for a free member. *)
 }
 
-let create m ?(validate = fun _ -> Lwt.return_true) ?(check = fun _ f -> f true) ?(dispose = fun _ -> Lwt.return_unit) create =
-  { max = m;
-    create = create;
-    validate = validate;
-    check = check;
-    dispose = dispose;
+let create
+  ?(validate = fun _ -> Lwt.return_true)
+  ?(check = fun _ f -> f true)
+  ?(dispose = fun _ -> Lwt.return_unit)
+  max
+  create = {
+    max; create; validate; check; dispose;
     cleared = ref (ref false);
     count = 0;
     list = Queue.create ();
-    waiters = Lwt_sequence.create () }
+    waiters = Lwt_sequence.create ()
+  }
 
 let set_max p n = p.max <- n
 

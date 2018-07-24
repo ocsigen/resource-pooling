@@ -40,10 +40,10 @@ type 'a t
   (** A pool containing elements of type ['a]. *)
 
 val create :
-  int ->
   ?validate : ('a -> bool Lwt.t) ->
   ?check : ('a -> (bool -> unit) -> unit) ->
   ?dispose : ('a -> unit Lwt.t) ->
+  int ->
   (unit -> 'a Lwt.t) -> 'a t
   (** [create n ?check ?validate ?dispose f] creates a new pool with at most
       [n] elements. [f] is used to create a new pool element.  Elements are
