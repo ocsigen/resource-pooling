@@ -1,13 +1,33 @@
 [@@@ocaml.warning "+A-44-48"]
 
-(* [Lwt_sequence] is deprecated – we don't want users outside Lwt using it.
-   However, it is still used internally by Lwt. So, briefly disable warning 3
-   ("deprecated"), and create a local, non-deprecated alias for
-   [Lwt_sequence] that can be referred to by the rest of the code in this
-   module without triggering any more warnings. *)
-[@@@ocaml.warning "-3"]
-module Lwt_sequence = Lwt_sequence
-[@@@ocaml.warning "+3"]
+module Opt = BatOption
+
+module Sequence = struct
+  module Dllist = BatDllist
+
+  type 'a t = 'a Dllist.t option
+
+  let create () = None
+
+  let take_opt_l l = l |> Opt.map @@ fun l ->
+    let res = Dllist.get l in
+    Dllist.remove l;
+    res
+
+  let add_r e = function
+    | None -> Some (Dllist.create e)
+    | Some l ->
+        let _ = Dllist.prepend l e in
+        Some l
+
+  let remove = function
+    | None -> ()
+    | Some l -> Dllist.remove l
+
+  let length = function
+    | None -> 0
+    | Some l -> Dllist.length l
+end
 
 open Lwt.Infix
 
@@ -28,7 +48,7 @@ type 'a t = {
   (* Number of elements in the pool. *)
   list : 'a Queue.t;
   (* Available pool members. *)
-  waiters : 'a Lwt.u Lwt_sequence.t;
+  waiters : 'a Lwt.u Sequence.t;
   (* Promise resolvers waiting for a free member. *)
 }
 
@@ -42,7 +62,7 @@ let create
     cleared = ref (ref false);
     count = 0;
     list = Queue.create ();
-    waiters = Lwt_sequence.create ()
+    waiters = Sequence.create ()
   }
 
 let set_max p n = p.max <- n
@@ -62,7 +82,7 @@ let create_member p =
 
 (* Release a pool member. *)
 let release p c =
-  match Lwt_sequence.take_opt_l p.waiters with
+  match Sequence.take_opt_l p.waiters with
   | Some wakener ->
     (* A promise resolver is waiting, give it the pool member. *)
     Lwt.wakeup_later wakener c
@@ -85,7 +105,7 @@ let dispose p c =
 
 (* Create a new member when one is thrown away. *)
 let replace_disposed p =
-  match Lwt_sequence.take_opt_l p.waiters with
+  match Sequence.take_opt_l p.waiters with
   | None ->
     (* No one is waiting, do not create a new member to avoid
        losing an error if creation fails. *)
@@ -120,6 +140,12 @@ let validate_and_return p c =
 
 exception Resource_invalid
 
+let add_task_r sequence =
+  let p, r = Lwt.task () in
+  let node = Sequence.add_r r sequence in
+  Lwt.on_cancel p (fun () -> Sequence.remove node);
+  p
+
 (* Acquire a pool member. *)
 let acquire ~attempts p =
   assert (attempts > 0);
@@ -131,7 +157,7 @@ let acquire ~attempts p =
         create_member p
       else
         (* Limit reached: wait for a free one. *)
-        (Lwt.add_task_r [@ocaml.warning "-3"]) p.waiters >>= validate_and_return p
+        add_task_r p.waiters >>= validate_and_return p
     else
       (* Take the first free member and validate it. *)
       let c = Queue.take p.list in
@@ -197,4 +223,4 @@ let clear p =
   p.cleared := ref false;
   Lwt_list.iter_s (dispose p) elements
 
-let wait_queue_length p = Lwt_sequence.length p.waiters
+let wait_queue_length p = Sequence.length p.waiters
