@@ -1,20 +1,20 @@
-OASISFormat:            0.4
-Name:                   resource-pooling
-Version:                0.1
-Synopsis:               a derivative of Lwt_pool with extensions
-Description:            The module Lwt_pool from the lwt package implements
-                        resource pooling. With Resource_pool this package
-                        provides a modified version with additional features.
-                        Also there is a module called Server_pool that manages
-                        pools of pools (think about a connection pool to a
-                        cluster of servers).
-Authors:                Jan Rochel (BeSport)
-Maintainers:            Jan Rochel <jan@besport.com>
-Homepage:               https://github.com/ocsigen/resource-pooling
-License:                MIT
-BuildTools:             ocamlbuild
-Plugins:                DevFiles (0.4), META (0.4)
-OCamlVersion:           >= 4.01
+OASISFormat:  0.4
+Name:         resource-pooling
+Version:      0.1
+Synopsis:     library for pooling resources like connections, threads, or similar
+Description:  This package is derived from the module Lwt_pool from the lwt
+              package, which implements resource pooling. With Resource_pool
+              this package provides a modified version with additional
+              features. Also there is a module called Server_pool that manages
+              resource clusters, specifically a cluster of servers each with
+              its own connection pool.
+Authors:      Jan Rochel (BeSport)
+Maintainers:  Jan Rochel <jan@besport.com>
+Homepage:     https://github.com/ocsigen/resource-pooling
+License:      MIT
+BuildTools:   ocamlbuild
+Plugins:      DevFiles (0.4), META (0.4)
+OCamlVersion: >= 4.01
 
 SourceRepository master
   Type: git

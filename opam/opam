@@ -5,7 +5,7 @@ maintainer: "Jan Rochel <jan@besport.com>"
 authors: [ "Jan Rochel (BeSport)" ]
 license: "MIT"
 homepage: "https://github.com/ocsigen/resource-pooling"
-dev-repo: "https://github.com/besport/resource-pooling.git"
+dev-repo: "https://github.com/ocsigen/resource-pooling.git"
 bug-reports: "https://github.com/ocsigen/resource-pooling/issues"
 build: [
   ["oasis" "setup"]
