@@ -24,9 +24,9 @@ build-test: [
 ]
 depends: [
   "batteries"
-  "lwt"
+  ("lwt" {>= "2.4.7" & < "4.0.0"})
   ("oasis" {build & >= "0.4.7"} | "oasis-mirage" {build & >= "0.4.7"})
   "ocamlbuild" {build}
   "ocamlfind" {build}
 ]
-available: [ ocaml-version >= "4.01" ]
+available: [ ocaml-version >= "4.02" ]

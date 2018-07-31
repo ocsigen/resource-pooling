@@ -14,7 +14,7 @@ Homepage:     https://github.com/ocsigen/resource-pooling
 License:      MIT
 BuildTools:   ocamlbuild
 Plugins:      DevFiles (0.4), META (0.4)
-OCamlVersion: >= 4.01
+OCamlVersion: >= 4.02
 
 SourceRepository master
   Type: git
@@ -24,5 +24,5 @@ SourceRepository master
 
 Library "resource-pooling"
   Path: src
-  BuildDepends: lwt, batteries
+  BuildDepends: lwt (>= 2.4.7 && < 4.0.0), batteries
   Modules: Resource_pool, Server_pool
