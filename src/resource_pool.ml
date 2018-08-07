@@ -1,32 +1,74 @@
 [@@@ocaml.warning "+A-44-48"]
 
-module Opt = BatOption
-
 module Sequence = struct
-  module Dllist = BatDllist
 
-  type 'a t = 'a Dllist.t option
+  (* Inlining a small subset of BatDllist to prevent a heavy
+     dependency on the whole batteries package *)
+
+  exception Empty
+
+  type 'a dllist = {
+    mutable data : 'a;
+    mutable next : 'a dllist;
+    mutable prev : 'a dllist
+  }
+
+  let remove_dllist node =
+    let next = node.next in
+    if next == node then raise Empty;
+    (* singleton list points to itself for next *)
+    let prev = node.prev in
+    (* Remove node from list by linking prev and next together *)
+    prev.next <- next;
+    next.prev <- prev;
+    (* Make node a singleton list by setting its next and prev to itself *)
+    node.next <- node;
+    node.prev <- node
+
+  let create_dllist x = let rec nn = { data = x; next = nn; prev = nn } in nn
+
+  let prepend_dllist node elem =
+    let nn = { data = elem; next = node; prev = node.prev } in
+    node.prev.next <- nn;
+    node.prev <- nn;
+    nn
+
+  let length_dllist node =
+    let rec loop cnt n =
+      if n == node then
+        cnt
+      else
+        loop (cnt + 1) n.next
+    in
+    loop 1 node.next
+
+  type 'a t = 'a dllist option
 
   let create () = None
 
-  let take_opt_l l = l |> Opt.map @@ fun l ->
-    let res = Dllist.get l in
-    Dllist.remove l;
-    res
+  let take_opt_l l =
+    match l with
+    | Some l ->
+      let res = l.data in
+      remove_dllist l;
+      Some res
+    | None ->
+      None
 
   let add_r e = function
-    | None -> Some (Dllist.create e)
+    | None -> Some (create_dllist e)
     | Some l ->
-        let _ = Dllist.prepend l e in
-        Some l
+      let _ = prepend_dllist l e in
+      Some l
 
   let remove = function
     | None -> ()
-    | Some l -> Dllist.remove l
+    | Some l -> remove_dllist l
 
   let length = function
     | None -> 0
-    | Some l -> Dllist.length l
+    | Some l -> length_dllist l
+
 end
 
 open Lwt.Infix

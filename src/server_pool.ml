@@ -8,10 +8,6 @@ to access one of the connections, which are served in a round-robin fashion.
 
 [@@@ocaml.warning "+A-44-48"]
 
-open BatPervasives
-module List = BatList
-module Hashtbl = BatHashtbl
-
 let (>>=) = Lwt.(>>=)
 
 let section = Lwt_log.Section.make "server-pool"
@@ -35,6 +31,7 @@ module type CONF = sig
   type connection
   type server
   type serverid
+  val serverid_to_string : serverid -> string (** for debugging info *)
   val connect : server -> connection Lwt.t
   val close : connection -> unit Lwt.t
 end
@@ -63,15 +60,18 @@ module Make (Conf : CONF) = struct
 
   let add_many ?(connect_immediately = false) ~num_conn new_servers =
     let mk_connection_pool (serverid, server) : connection_pool =
-      Lwt_log.ign_notice_f ~section "adding server: %s" (dump serverid);
+      Lwt_log.ign_notice_f ~section "adding server: %s"
+        (Conf.serverid_to_string serverid);
       let connect () =
         Lwt_log.ign_info ~section @@
-          Printf.sprintf "opening connection to server %s" (dump serverid);
+        Printf.sprintf "opening connection to server %s"
+          (Conf.serverid_to_string serverid);
         Conf.connect server
       in
       let dispose conn =
         Lwt_log.ign_info ~section @@
-          Printf.sprintf "closing connection to server %s" (dump serverid);
+        Printf.sprintf "closing connection to server %s"
+          (Conf.serverid_to_string serverid);
         Lwt.catch (fun () -> Conf.close conn) (fun _ -> Lwt.return_unit)
       in
       let conn_pool = Resource_pool.create num_conn ~dispose connect in
@@ -86,7 +86,7 @@ module Make (Conf : CONF) = struct
       {serverid; connections = conn_pool}
     in
     let pools = List.map mk_connection_pool @@
-                  List.filter (not % server_exists % fst) new_servers in
+      List.filter (fun l -> not (server_exists (fst l))) new_servers in
     for _ = 1 to num_conn do
       List.iter (Resource_pool.add ~omit_max_check:true server_pool) pools
     done
@@ -95,7 +95,8 @@ module Make (Conf : CONF) = struct
     add_many ?connect_immediately ~num_conn [(serverid, server)]
 
   let add_existing ~num_conn serverid connections =
-    Lwt_log.ign_notice_f ~section "adding existing server: %s" (dump serverid);
+    Lwt_log.ign_notice_f ~section "adding existing server: %s"
+      (Conf.serverid_to_string serverid);
     Hashtbl.add servers serverid ();
     for _ = 1 to num_conn do
       Resource_pool.add ~omit_max_check:true server_pool {serverid; connections}
@@ -103,7 +104,8 @@ module Make (Conf : CONF) = struct
     ()
 
   let remove serverid =
-    Lwt_log.ign_notice_f ~section "removing server %s" (dump serverid);
+    Lwt_log.ign_notice_f ~section "removing server %s"
+      (Conf.serverid_to_string serverid);
     Hashtbl.remove servers serverid
 
   let use ?usage_attempts f =
@@ -130,15 +132,17 @@ module Make (Conf : CONF) = struct
           if not @@ server_exists serverid
             then begin
               Lwt_log.ign_info ~section @@
-                Printf.sprintf "cannot use server %s (removed)" (dump serverid);
+              Printf.sprintf "cannot use server %s (removed)"
+                (Conf.serverid_to_string serverid);
               Lwt.fail Resource_pool.Resource_invalid
             end
             else Lwt.return_unit
         end >>= fun () ->
         Lwt_log.ign_debug ~section @@
-          Printf.sprintf "using connection to server %s" (dump serverid);
+        Printf.sprintf "using connection to server %s"
+          (Conf.serverid_to_string serverid);
         wrap_resource_invalid (fun () -> Resource_pool.use ?usage_attempts connections f)
 
-    let servers () = List.of_enum @@ Hashtbl.keys servers
+  let servers () = Hashtbl.fold (fun server _ l -> server :: l) servers []
 
 end

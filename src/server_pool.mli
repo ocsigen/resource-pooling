@@ -10,6 +10,7 @@ module type CONF = sig
   type connection
   type server
   type serverid
+  val serverid_to_string : serverid -> string (* for debugging purposes *)
   val connect : server -> connection Lwt.t
   val close : connection -> unit Lwt.t
 end
