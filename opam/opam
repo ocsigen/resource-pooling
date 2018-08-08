@@ -1,6 +1,6 @@
 opam-version: "1.2"
 name: "resource-pooling"
-version: "0.1"
+version: "0.2"
 maintainer: "Jan Rochel <jan@besport.com>"
 authors: [ "Jan Rochel (BeSport)" ]
 license: "MIT"
