@@ -23,7 +23,6 @@ build-test: [
   ["ocaml" "setup.ml" "-test"]
 ]
 depends: [
-  "batteries"
   ("lwt" {>= "2.4.7" & < "4.0.0"})
   ("oasis" {build & >= "0.4.7"} | "oasis-mirage" {build & >= "0.4.7"})
   "ocamlbuild" {build}
