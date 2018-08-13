@@ -207,7 +207,8 @@ let acquire ~attempts p =
   in
   let rec keep_trying attempts =
     if attempts > 0
-      then try once () with Resource_invalid -> keep_trying (attempts - 1)
+      then Lwt.catch once @@ fun e ->
+        if e = Resource_invalid then keep_trying (attempts - 1) else Lwt.fail e
       else Lwt.fail Resource_invalid
   in keep_trying attempts
 
