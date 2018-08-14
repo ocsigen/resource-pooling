@@ -1,6 +1,5 @@
 Makefile
 configure
-setup.ml
 *.annot
 *.cmo
 *.cma
