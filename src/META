@@ -1,0 +1,13 @@
+# OASIS_START
+# DO NOT EDIT (digest: d4953600f35236b9c7d1eee0f9d2668d)
+version = "0.3"
+description =
+"library for pooling resources like connections, threads, or similar"
+requires = "lwt"
+archive(byte) = "resource-pooling.cma"
+archive(byte, plugin) = "resource-pooling.cma"
+archive(native) = "resource-pooling.cmxa"
+archive(native, plugin) = "resource-pooling.cmxs"
+exists_if = "resource-pooling.cma"
+# OASIS_STOP
+
