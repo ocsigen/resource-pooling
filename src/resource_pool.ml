@@ -1,75 +1,240 @@
 [@@@ocaml.warning "+A-44-48"]
 
+(* this module is a copy of Lwt_sequence from
+   Lwt version 17c8d5e2071f3690850a99c3ce0f2e6a79a8ac7f *)
 module Sequence = struct
+[@@@ocaml.warning "-32"]
+(* start copy & paste ------------------------------------------------------- *)
+(* This file is part of Lwt, released under the MIT license. See LICENSE.md for
+   details, or visit https://github.com/ocsigen/lwt/blob/master/LICENSE.md. *)
 
-  (* Inlining a small subset of BatDllist to prevent a heavy
-     dependency on the whole batteries package *)
 
-  exception Empty
 
-  type 'a dllist = {
-    mutable data : 'a;
-    mutable next : 'a dllist;
-    mutable prev : 'a dllist
-  }
+exception Empty
 
-  let remove_dllist node =
-    let next = node.next in
-    if next == node then raise Empty;
-    (* singleton list points to itself for next *)
-    let prev = node.prev in
-    (* Remove node from list by linking prev and next together *)
-    prev.next <- next;
-    next.prev <- prev;
-    (* Make node a singleton list by setting its next and prev to itself *)
-    node.next <- node;
-    node.prev <- node
+type 'a t = {
+  mutable prev : 'a t;
+  mutable next : 'a t;
+}
 
-  let create_dllist x = let rec nn = { data = x; next = nn; prev = nn } in nn
+type 'a node = {
+  mutable node_prev : 'a t;
+  mutable node_next : 'a t;
+  mutable node_data : 'a;
+  mutable node_active : bool;
+}
 
-  let prepend_dllist node elem =
-    let nn = { data = elem; next = node; prev = node.prev } in
-    node.prev.next <- nn;
-    node.prev <- nn;
-    nn
+external seq_of_node : 'a node -> 'a t = "%identity"
+external node_of_seq : 'a t -> 'a node = "%identity"
 
-  let length_dllist node =
-    let rec loop cnt n =
-      if n == node then
-        cnt
+(* +-----------------------------------------------------------------+
+   | Operations on nodes                                             |
+   +-----------------------------------------------------------------+ *)
+
+let get node =
+  node.node_data
+
+let set node data =
+  node.node_data <- data
+
+let remove node =
+  if node.node_active then begin
+    node.node_active <- false;
+    let seq = seq_of_node node in
+    seq.prev.next <- seq.next;
+    seq.next.prev <- seq.prev
+  end
+
+(* +-----------------------------------------------------------------+
+   | Operations on sequences                                         |
+   +-----------------------------------------------------------------+ *)
+
+let create () =
+  let rec seq = { prev = seq; next = seq } in
+  seq
+
+let is_empty seq = seq.next == seq
+
+let length seq =
+  let rec loop curr len =
+    if curr == seq then
+      len
+    else
+      let node = node_of_seq curr in loop node.node_next (len + 1)
+  in
+  loop seq.next 0
+
+let add_l data seq =
+  let node = { node_prev = seq; node_next = seq.next; node_data = data; node_active = true } in
+  seq.next.prev <- seq_of_node node;
+  seq.next <- seq_of_node node;
+  node
+
+let add_r data seq =
+  let node = { node_prev = seq.prev; node_next = seq; node_data = data; node_active = true } in
+  seq.prev.next <- seq_of_node node;
+  seq.prev <- seq_of_node node;
+  node
+
+let take_l seq =
+  if is_empty seq then
+    raise Empty
+  else begin
+    let node = node_of_seq seq.next in
+    remove node;
+    node.node_data
+  end
+
+let take_r seq =
+  if is_empty seq then
+    raise Empty
+  else begin
+    let node = node_of_seq seq.prev in
+    remove node;
+    node.node_data
+  end
+
+let take_opt_l seq =
+  if is_empty seq then
+    None
+  else begin
+    let node = node_of_seq seq.next in
+    remove node;
+    Some node.node_data
+  end
+
+let take_opt_r seq =
+  if is_empty seq then
+    None
+  else begin
+    let node = node_of_seq seq.prev in
+    remove node;
+    Some node.node_data
+  end
+
+let transfer_l s1 s2 =
+  s2.next.prev <- s1.prev;
+  s1.prev.next <- s2.next;
+  s2.next <- s1.next;
+  s1.next.prev <- s2;
+  s1.prev <- s1;
+  s1.next <- s1
+
+let transfer_r s1 s2 =
+  s2.prev.next <- s1.next;
+  s1.next.prev <- s2.prev;
+  s2.prev <- s1.prev;
+  s1.prev.next <- s2;
+  s1.prev <- s1;
+  s1.next <- s1
+
+let iter_l f seq =
+  let rec loop curr =
+    if curr != seq then begin
+      let node = node_of_seq curr in
+      if node.node_active then f node.node_data;
+      loop node.node_next
+    end
+  in
+  loop seq.next
+
+let iter_r f seq =
+  let rec loop curr =
+    if curr != seq then begin
+      let node = node_of_seq curr in
+      if node.node_active then f node.node_data;
+      loop node.node_prev
+    end
+  in
+  loop seq.prev
+
+let iter_node_l f seq =
+  let rec loop curr =
+    if curr != seq then begin
+      let node = node_of_seq curr in
+      if node.node_active then f node;
+      loop node.node_next
+    end
+  in
+  loop seq.next
+
+let iter_node_r f seq =
+  let rec loop curr =
+    if curr != seq then begin
+      let node = node_of_seq curr in
+      if node.node_active then f node;
+      loop node.node_prev
+    end
+  in
+  loop seq.prev
+
+let fold_l f seq acc =
+  let rec loop curr acc =
+    if curr == seq then
+      acc
+    else
+      let node = node_of_seq curr in
+      if node.node_active then
+        loop node.node_next (f node.node_data acc)
       else
-        loop (cnt + 1) n.next
-    in
-    loop 1 node.next
+        loop node.node_next acc
+  in
+  loop seq.next acc
 
-  type 'a t = 'a dllist option
+let fold_r f seq acc =
+  let rec loop curr acc =
+    if curr == seq then
+      acc
+    else
+      let node = node_of_seq curr in
+      if node.node_active then
+        loop node.node_prev (f node.node_data acc)
+      else
+        loop node.node_prev acc
+  in
+  loop seq.prev acc
 
-  let create () = None
+let find_node_l f seq =
+  let rec loop curr =
+    if curr != seq then
+      let node = node_of_seq curr in
+      if node.node_active then
+        if f node.node_data then
+          node
+        else
+          loop node.node_next
+      else
+        loop node.node_next
+    else
+      raise Not_found
+  in
+  loop seq.next
 
-  let take_opt_l l =
-    match l with
-    | Some l ->
-      let res = l.data in
-      remove_dllist l;
-      Some res
-    | None ->
-      None
+let find_node_r f seq =
+  let rec loop curr =
+    if curr != seq then
+      let node = node_of_seq curr in
+      if node.node_active then
+        if f node.node_data then
+          node
+        else
+          loop node.node_prev
+      else
+        loop node.node_prev
+    else
+      raise Not_found
+  in
+  loop seq.prev
 
-  let add_r e = function
-    | None -> Some (create_dllist e)
-    | Some l ->
-      let _ = prepend_dllist l e in
-      Some l
+let find_node_opt_l f seq =
+  try Some (find_node_l f seq) with Not_found -> None
 
-  let remove = function
-    | None -> ()
-    | Some l -> remove_dllist l
-
-  let length = function
-    | None -> 0
-    | Some l -> length_dllist l
-
+let find_node_opt_r f seq =
+  try Some (find_node_r f seq) with Not_found -> None
+(* end copy & paste --------------------------------------------------------- *)
 end
+[@@@ocaml.warning "+32"]
+
 
 open Lwt.Infix
 
@@ -199,7 +364,7 @@ let acquire ~attempts p =
         create_member p
       else
         (* Limit reached: wait for a free one. *)
-        add_task_r p.waiters >>= validate_and_return p
+        (add_task_r [@ocaml.warning "-3"]) p.waiters >>= validate_and_return p
     else
       (* Take the first free member and validate it. *)
       let c = Queue.take p.list in
