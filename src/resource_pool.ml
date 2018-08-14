@@ -13,7 +13,7 @@ module Sequence = struct
     mutable prev : 'a dllist
   }
 
-  let remove_dllist node =
+  let drop_dllist node =
     let next = node.next in
     if next == node then raise Empty;
     (* singleton list points to itself for next *)
@@ -23,7 +23,8 @@ module Sequence = struct
     next.prev <- prev;
     (* Make node a singleton list by setting its next and prev to itself *)
     node.next <- node;
-    node.prev <- node
+    node.prev <- node;
+    next
 
   let create_dllist x = let rec nn = { data = x; next = nn; prev = nn } in nn
 
@@ -42,30 +43,37 @@ module Sequence = struct
     in
     loop 1 node.next
 
-  type 'a t = 'a dllist option
+  type 'a t = 'a dllist option ref
 
-  let create () = None
+  let create () = ref None
 
-  let take_opt_l l =
-    match l with
+  let take_opt_l seq =
+    match !seq with
     | Some l ->
       let res = l.data in
-      remove_dllist l;
+      seq := (try Some (drop_dllist l) with Empty -> None);
       Some res
     | None ->
       None
 
-  let add_r e = function
-    | None -> Some (create_dllist e)
+  let add_r e seq =
+    match !seq with
+    | None ->
+      let n = create_dllist e in
+      seq := Some n;
+      n
     | Some l ->
-      let _ = prepend_dllist l e in
-      Some l
+      prepend_dllist l e
 
-  let remove = function
-    | None -> ()
-    | Some l -> remove_dllist l
+  let remove elt seq =
+    match !seq with
+    | Some l when l == elt ->
+      seq := (try Some (drop_dllist elt) with Empty -> None)
+    | _ ->
+      try ignore (drop_dllist elt) with Empty -> ()
 
-  let length = function
+  let length seq =
+    match !seq with
     | None -> 0
     | Some l -> length_dllist l
 
@@ -185,7 +193,7 @@ exception Resource_invalid
 let add_task_r sequence =
   let p, r = Lwt.task () in
   let node = Sequence.add_r r sequence in
-  Lwt.on_cancel p (fun () -> Sequence.remove node);
+  Lwt.on_cancel p (fun () -> Sequence.remove node sequence);
   p
 
 (* Acquire a pool member. *)
