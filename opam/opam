@@ -21,7 +21,7 @@ build-test: [
   ["ocaml" "setup.ml" "-test"]
 ]
 depends: [
-  "lwt" {>= "2.4.7" & < "4.0.0"}
+  "lwt" {>= "2.4.7"}
   "lwt_log"
   "ocamlbuild" {build}
   "ocamlfind" {build}
