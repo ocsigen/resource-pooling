@@ -345,7 +345,7 @@ let validate_and_return p c =
          replace_disposed p;
          Lwt.fail e)
 
-exception Resource_invalid
+exception Resource_invalid of {safe : bool}
 
 let add_task_r sequence =
   let p, r = Lwt.task () in
@@ -370,12 +370,14 @@ let acquire ~attempts p =
       let c = Queue.take p.list in
       validate_and_return p c
   in
-  let rec keep_trying attempts =
+  let rec keep_trying resource_invalid attempts =
     if attempts > 0
       then Lwt.catch once @@ fun e ->
-        if e = Resource_invalid then keep_trying (attempts - 1) else Lwt.fail e
-      else Lwt.fail Resource_invalid
-  in keep_trying attempts
+        match e with
+        | Resource_invalid {safe = true} -> keep_trying e (attempts - 1)
+        | e -> Lwt.fail e
+      else Lwt.fail resource_invalid
+  in keep_trying (Resource_invalid {safe = true} (*unused*)) attempts
 
 (* Release a member when use resulted in failed promise if the member
    is still valid. *)
@@ -398,12 +400,12 @@ let use ?(creation_attempts = 1) ?(usage_attempts = 1) p f =
   (* Capture the current cleared state so we can see if it changes while this
      element is in use *)
   let rec make_promise attempts =
-    if attempts <= 0 then Lwt.fail Resource_invalid else
+    if attempts <= 0 then Lwt.fail @@ Resource_invalid {safe = true} else
     acquire ~attempts:creation_attempts p >>= fun c ->
     Lwt.catch
       (fun () -> f c >>= fun res -> Lwt.return (c,res))
       (function
-         | Resource_invalid ->
+         | Resource_invalid {safe = true} ->
              dispose p c >>= fun () ->
              make_promise (attempts - 1)
          | e ->

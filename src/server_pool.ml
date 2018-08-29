@@ -14,19 +14,6 @@ let section = Lwt_log.Section.make "server-pool"
 let () = Lwt_log.Section.set_level section Lwt_log.Info
 
 
-(* As we use nested pools, we need to make sure that the exception
-   [Lwt.Resource_invalid affects] the correct pool. If it is raised by the
-   function [f] supplied to [use] it should affect the inner pool. If it is
-   raised by the function [use] of this module it should affect the outer
-   pool. Therefore we transform a [Lwt.Resource_invalid] raised by [f] into a
-   [Inner_resource_invalid] to distinguish it from the outer exception. At
-   the end of [use] we transform it back to [Lwt.Resource_invalid] which is
-   what the user of [use] would expect. The outer [Resource_invalid] is used
-   to signal that a server has been removed from the pool, in which case we
-   retry using another server. Note that at this point [f] has not yet been
-   called, so there is no problem concerning side-effects. *)
-exception Inner_resource_invalid
-
 module type CONF = sig
   type connection
   type server
@@ -109,17 +96,6 @@ module Make (Conf : CONF) = struct
     Hashtbl.remove servers serverid
 
   let use ?usage_attempts f =
-
-    let wrap_resource_invalid f = Lwt.catch f @@ function
-      | Resource_pool.Resource_invalid -> Lwt.fail Inner_resource_invalid
-      | e -> Lwt.fail e
-    in
-    let unwrap_resource_invalid f = Lwt.catch f @@ function
-      | Inner_resource_invalid -> Lwt.fail Resource_pool.Resource_invalid
-      | e -> Lwt.fail e
-    in
-
-    unwrap_resource_invalid @@ fun () ->
       (* We use retry here, since elements cannot be removed from an
          [Resource_pool.t] directly. Therefore we detect whether a server has been
          removed by our own means and try again with another server it this was
@@ -134,14 +110,26 @@ module Make (Conf : CONF) = struct
               Lwt_log.ign_info ~section @@
               Printf.sprintf "cannot use server %s (removed)"
                 (Conf.serverid_to_string serverid);
-              Lwt.fail Resource_pool.Resource_invalid
+              Lwt.fail @@ Resource_pool.(Resource_invalid {safe = true})
             end
             else Lwt.return_unit
         end >>= fun () ->
         Lwt_log.ign_debug ~section @@
         Printf.sprintf "using connection to server %s"
           (Conf.serverid_to_string serverid);
-        wrap_resource_invalid (fun () -> Resource_pool.use ?usage_attempts connections f)
+        Lwt.catch
+          (fun () -> Resource_pool.use ?usage_attempts connections f)
+          (fun e -> match e with
+             | Resource_pool.(Resource_invalid {safe = true}) ->
+                 Lwt_log.ign_warning
+                   "connection unusable (safe to retry using another server)";
+                 Lwt.fail e
+             | Resource_pool.(Resource_invalid {safe = false}) ->
+                 Lwt_log.ign_warning
+                   "connection unusable (unsafe to retry using another server)";
+                 Lwt.fail e
+             | e -> Lwt.fail e
+          )
 
   let servers () = Hashtbl.fold (fun server _ l -> server :: l) servers []
 

@@ -41,5 +41,10 @@ module Make (Conf : CONF) : sig
   val add_existing :
     num_conn:int -> Conf.serverid -> Conf.connection Resource_pool.t -> unit
 
+  (* If [Resource_invalid] is raised by the supplied function, the connection is
+     disposed of (using [close]), and a new attempt to run the function is
+     launched to the same server as many times as specified by [usage_attempts]
+     (default: 1). Be mindful of side-effects that the the function might have
+     caused befaure raising [Resource_invalid]. *)
   val use : ?usage_attempts:int -> (Conf.connection -> 'a Lwt.t) -> 'a Lwt.t
 end

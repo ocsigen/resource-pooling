@@ -74,9 +74,12 @@ val create :
 (** set the maximum size of the pool *)
 val set_max : 'a t -> int -> unit
 
-  (** exception to be thrown by the function supplied to [use] when a resource
-      is no longer valid and therefore to be disposed of *)
-exception Resource_invalid
+(** exception to be thrown by the function supplied to [use] when a resource
+    is no longer valid and therefore to be disposed of;
+    [safe] determines whether it is safe to relaunch the function supplied to
+    [use]. Typically this refers to whether side-effects (that should not occur
+    a second time) have been effectuated before the exception was raised. *)
+exception Resource_invalid of {safe : bool}
 
 val use :
   ?creation_attempts:int ->
@@ -95,9 +98,8 @@ val use :
 
       The parameter [usage_attempts] (default: [1]) controls the number of
       attempts that are made in case [f] raises the [Resource_invalid]
-      exception. After each attempt the resource is disposed of. Be reminded to
-      take into account any side-effects [f] might have already trigged before
-      raising the exception.
+      exception with [safe] set to true. After each attempt the resource is
+      disposed of.
 
       In the case that [p] is exhausted and the maximum number of elements
       is reached, [use] will wait until one becomes free. *)
