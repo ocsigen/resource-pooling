@@ -21,7 +21,7 @@ let () = Lwt_log.Section.set_level section Lwt_log.Info
    pool. Therefore we transform a [Lwt.Resource_invalid] raised by [f] into a
    [Inner_resource_invalid] to distinguish it from the outer exception. At
    the end of [use] we transform it back to [Lwt.Resource_invalid] which is
-   what the user of [use] would expect. The inner [Resource_invalid] is used
+   what the user of [use] would expect. The outer [Resource_invalid] is used
    to signal that a server has been removed from the pool, in which case we
    retry using another server. Note that at this point [f] has not yet been
    called, so there is no problem concerning side-effects. *)
