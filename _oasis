@@ -1,6 +1,6 @@
 OASISFormat:  0.4
 Name:         resource-pooling
-Version:      0.3.2
+Version:      0.4
 Synopsis:     library for pooling resources like connections, threads, or similar
 Description:  This package is derived from the module Lwt_pool from the lwt
               package, which implements resource pooling. With Resource_pool

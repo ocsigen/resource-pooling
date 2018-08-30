@@ -1,6 +1,6 @@
 # OASIS_START
-# DO NOT EDIT (digest: a1faafe860f376ae6a4a1e8e35aa2c16)
-version = "0.3.2"
+# DO NOT EDIT (digest: daf33ded420104bf71a235928d1d184c)
+version = "0.4"
 description =
 "library for pooling resources like connections, threads, or similar"
 requires = "lwt lwt_log"
