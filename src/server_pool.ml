@@ -11,7 +11,7 @@ to access one of the connections, which are served in a round-robin fashion.
 let (>>=) = Lwt.(>>=)
 
 let section = Lwt_log.Section.make "server-pool"
-let () = Lwt_log.Section.set_level section Lwt_log.Info
+let () = Lwt_log.Section.set_level section Lwt_log.Debug
 
 
 module type CONF = sig
