@@ -32,8 +32,8 @@ module Make (Conf : CONF) = struct
 
   (* Each server holds its own connection_pool, so a server pool is a pool of
      connection pools. HOWEVER, [server_pool] will not contain one
-     connection pool per server, but [n] connection pools per server, where [n]
-     is the (maximum) size of the servers connection pool. *)
+     connection pool per server, but [n] times the same connection pool per
+     server, where [n] is the (maximum) size of the servers connection pool. *)
   let server_pool : connection_pool Resource_pool.t =
     let nil () = failwith "Bs_db.server_pool: invalid connection attempt" in
     (* We supply [0] as the first argument to [Resource_pool.create] as it will
