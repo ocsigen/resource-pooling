@@ -30,6 +30,11 @@ module Make (Conf : CONF) = struct
     connections : Conf.connection Resource_pool.t
   }
 
+  type server_status = {
+    desired : int;
+    current : int
+  }
+
   (* Each server holds its own connection_pool, so a server pool is a pool of
      connection pools. HOWEVER, [server_pool] will not contain one
      connection pool per server, but [n] times the same connection pool per
@@ -41,7 +46,18 @@ module Make (Conf : CONF) = struct
        we want since new servers are to be added by the user of this module. *)
     Resource_pool.create 0 nil
 
-  let servers : (Conf.serverid, unit) Hashtbl.t = Hashtbl.create 9
+  let servers : (Conf.serverid, server_status) Hashtbl.t = Hashtbl.create 9
+
+  let log_server_status {desired; current} =
+    Lwt_log.ign_info_f ~section "current number of connections: %n/%n"
+                                current desired
+  let update_current_count serverid f =
+    let server_status =
+      let old_status = Hashtbl.find servers serverid in
+      {old_status with current = f old_status.current}
+    in
+    Hashtbl.replace servers serverid server_status;
+    log_server_status server_status
 
   let server_exists serverid = Hashtbl.mem servers serverid
 
@@ -50,17 +66,19 @@ module Make (Conf : CONF) = struct
       Lwt_log.ign_notice_f ~section "adding server: %s"
         (Conf.serverid_to_string serverid);
       let connect () =
-        Lwt_log.ign_info ~section @@
-        Printf.sprintf "opening connection to server %s"
-          (Conf.serverid_to_string serverid);
+        Lwt_log.ign_info_f ~section "opening connection to server %s"
+                                    (Conf.serverid_to_string serverid);
+        update_current_count serverid succ;
         Conf.connect server
       in
       let dispose conn =
-        Lwt_log.ign_info ~section @@
-        Printf.sprintf "closing connection to server %s"
-          (Conf.serverid_to_string serverid);
+        Lwt_log.ign_info_f ~section
+          "closing connection to server %s" (Conf.serverid_to_string serverid);
+        update_current_count serverid pred;
         Lwt.catch (fun () -> Conf.close conn) (fun _ -> Lwt.return_unit)
       in
+      let server_status = {desired = num_conn; current = 0} in
+      Hashtbl.add servers serverid server_status;
       let conn_pool = Resource_pool.create num_conn ~dispose connect in
       if connect_immediately then
         for _ = 1 to num_conn do
@@ -69,7 +87,6 @@ module Make (Conf : CONF) = struct
             try Resource_pool.add conn_pool c; Lwt.return_unit
             with Resource_pool.Resource_limit_exceeded -> dispose c
         done;
-      Hashtbl.add servers serverid ();
       {serverid; connections = conn_pool}
     in
     let pools = List.map mk_connection_pool @@
@@ -84,7 +101,8 @@ module Make (Conf : CONF) = struct
   let add_existing ~num_conn serverid connections =
     Lwt_log.ign_notice_f ~section "adding existing server: %s"
       (Conf.serverid_to_string serverid);
-    Hashtbl.add servers serverid ();
+    let server_status = {desired = num_conn; current = 0} in
+    Hashtbl.add servers serverid server_status;
     for _ = 1 to num_conn do
       Resource_pool.add ~omit_max_check:true server_pool {serverid; connections}
     done;
