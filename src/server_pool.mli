@@ -27,18 +27,29 @@ module Make (Conf : CONF) : sig
   (** Adds a server to the pool, permitting a maximum number [num_conn] of
       concurrent connections to that server. If [connect_immediately] is [true]
       (default: [false] then [num_conn] are immediately opened to the server.
-      If the given server exists already no action is taken. *)
+      If the given server exists already no action is taken.
+      If [essential] is [false] (default: [true]) then the added server is
+      immediately removed when a [Resource_invalid] exception is raised while
+      using one of its connections. While this ensures short downtimes it leads
+      to the risk of all servers being removed (so make sure there is always one
+      essential server!) or too few servers remaining. Therefore setting
+      [essential] to [true] only truly makes sense if combined with a mechanism
+      to add servers to the cluster.
+  *)
   val add_one :
+    ?essential:bool ->
     ?connect_immediately:bool ->
     num_conn:int -> Conf.serverid -> Conf.server -> unit
   (* Corresponds to multiple sequential applications of [add_one] except for the
      fact that [add_many] will result in a better initial scheduling
      distribution. *)
   val add_many :
+    ?essential:bool ->
     ?connect_immediately:bool ->
     num_conn:int -> (Conf.serverid * Conf.server) list -> unit
   (* Add a server for which a connection pool already exists *)
   val add_existing :
+    ?essential:bool ->
     num_conn:int -> Conf.serverid -> Conf.connection Resource_pool.t -> unit
 
   (* If [Resource_invalid] is raised by the supplied function, the connection is

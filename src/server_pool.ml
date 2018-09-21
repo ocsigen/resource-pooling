@@ -6,7 +6,7 @@ server we maintain a number of connections. A user of this module can call [use]
 to access one of the connections, which are served in a round-robin fashion.
 *)
 
-[@@@ocaml.warning "+A-44-48"]
+[@@@ocaml.warning "+A-9-44-48"]
 
 let (>>=) = Lwt.(>>=)
 
@@ -32,8 +32,16 @@ module Make (Conf : CONF) = struct
 
   type server_status = {
     desired : int;
-    current : int
+    current : int;
+    essential : bool
   }
+
+  let servers : (Conf.serverid, server_status) Hashtbl.t = Hashtbl.create 9
+
+  let remove serverid =
+    Lwt_log.ign_notice_f ~section "removing server %s"
+                                  (Conf.serverid_to_string serverid);
+    Hashtbl.remove servers serverid
 
   (* Each server holds its own connection_pool, so a server pool is a pool of
      connection pools. HOWEVER, [server_pool] will not contain one
@@ -44,9 +52,15 @@ module Make (Conf : CONF) = struct
     (* We supply [0] as the first argument to [Resource_pool.create] as it will
        prevent [Resource_pool] to ever create a new resource on its own. This is what
        we want since new servers are to be added by the user of this module. *)
-    Resource_pool.create 0 nil
-
-  let servers : (Conf.serverid, server_status) Hashtbl.t = Hashtbl.create 9
+    let n = 0
+    and check {serverid} return =
+      let {essential} = Hashtbl.find servers serverid in
+      return @@ not essential
+    and dispose {serverid; connections} =
+      remove serverid;
+      Resource_pool.clear connections >>= fun () ->
+      Lwt.return_unit
+    in Resource_pool.create ~dispose ~check n nil
 
   let log_server_status {desired; current} =
     Lwt_log.ign_info_f ~section "current number of connections: %n/%n"
@@ -61,7 +75,9 @@ module Make (Conf : CONF) = struct
 
   let server_exists serverid = Hashtbl.mem servers serverid
 
-  let add_many ?(connect_immediately = false) ~num_conn new_servers =
+  let add_many
+      ?(essential = false)
+      ?(connect_immediately = false) ~num_conn new_servers =
     let mk_connection_pool (serverid, server) : connection_pool =
       Lwt_log.ign_notice_f ~section "adding server: %s"
                                     (Conf.serverid_to_string serverid);
@@ -77,7 +93,7 @@ module Make (Conf : CONF) = struct
         update_current_count serverid pred;
         Lwt.catch (fun () -> Conf.close conn) (fun _ -> Lwt.return_unit)
       in
-      let server_status = {desired = num_conn; current = 0} in
+      let server_status = {desired = num_conn; current = 0; essential} in
       Hashtbl.add servers serverid server_status;
       let conn_pool = Resource_pool.create num_conn ~dispose connect in
       if connect_immediately then
@@ -95,22 +111,17 @@ module Make (Conf : CONF) = struct
       List.iter (Resource_pool.add ~omit_max_check:true server_pool) pools
     done
 
-  let add_one ?connect_immediately ~num_conn serverid server =
-    add_many ?connect_immediately ~num_conn [(serverid, server)]
+  let add_one ?essential ?connect_immediately ~num_conn serverid server =
+    add_many ?essential ?connect_immediately ~num_conn [(serverid, server)]
 
-  let add_existing ~num_conn serverid connections =
+  let add_existing ?(essential = false) ~num_conn serverid connections =
     Lwt_log.ign_notice_f ~section "adding existing server: %s"
                                   (Conf.serverid_to_string serverid);
-    let server_status = {desired = num_conn; current = 0} in
+    let server_status = {desired = num_conn; current = 0; essential} in
     Hashtbl.add servers serverid server_status;
     for _ = 1 to num_conn do
       Resource_pool.add ~omit_max_check:true server_pool {serverid; connections}
     done
-
-  let remove serverid =
-    Lwt_log.ign_notice_f ~section "removing server %s"
-                                  (Conf.serverid_to_string serverid);
-    Hashtbl.remove servers serverid
 
   let use ?usage_attempts f =
       (* We use retry here, since elements cannot be removed from an
