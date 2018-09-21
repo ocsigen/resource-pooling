@@ -64,7 +64,7 @@ module Make (Conf : CONF) = struct
   let add_many ?(connect_immediately = false) ~num_conn new_servers =
     let mk_connection_pool (serverid, server) : connection_pool =
       Lwt_log.ign_notice_f ~section "adding server: %s"
-        (Conf.serverid_to_string serverid);
+                                    (Conf.serverid_to_string serverid);
       let connect () =
         Lwt_log.ign_info_f ~section "opening connection to server %s"
                                     (Conf.serverid_to_string serverid);
@@ -91,7 +91,7 @@ module Make (Conf : CONF) = struct
       {serverid; connections = conn_pool}
     in
     let pools = List.map mk_connection_pool @@
-      List.filter (fun l -> not (server_exists (fst l))) new_servers in
+      List.filter (fun l -> not @@ server_exists @@ fst l) new_servers in
     for _ = 1 to num_conn do
       List.iter (Resource_pool.add ~omit_max_check:true server_pool) pools
     done
@@ -101,17 +101,16 @@ module Make (Conf : CONF) = struct
 
   let add_existing ~num_conn serverid connections =
     Lwt_log.ign_notice_f ~section "adding existing server: %s"
-      (Conf.serverid_to_string serverid);
+                                  (Conf.serverid_to_string serverid);
     let server_status = {desired = num_conn; current = 0} in
     Hashtbl.add servers serverid server_status;
     for _ = 1 to num_conn do
       Resource_pool.add ~omit_max_check:true server_pool {serverid; connections}
-    done;
-    ()
+    done
 
   let remove serverid =
     Lwt_log.ign_notice_f ~section "removing server %s"
-      (Conf.serverid_to_string serverid);
+                                  (Conf.serverid_to_string serverid);
     Hashtbl.remove servers serverid
 
   let use ?usage_attempts f =
@@ -124,18 +123,14 @@ module Make (Conf : CONF) = struct
          was added. *)
       Resource_pool.use ~usage_attempts:9 server_pool @@ fun {serverid; connections} ->
         begin
-          if not @@ server_exists serverid
-            then begin
-              Lwt_log.ign_info ~section @@
-              Printf.sprintf "cannot use server %s (removed)"
-                (Conf.serverid_to_string serverid);
-              Lwt.fail @@ Resource_pool.(Resource_invalid {safe = true})
-            end
-            else Lwt.return_unit
+          if server_exists serverid then Lwt.return_unit else begin
+            Lwt_log.ign_info_f ~section "cannot use server %s (removed)"
+                                        (Conf.serverid_to_string serverid);
+            Lwt.fail Resource_pool.(Resource_invalid {safe = true})
+          end
         end >>= fun () ->
-        Lwt_log.ign_debug ~section @@
-        Printf.sprintf "using connection to server %s"
-          (Conf.serverid_to_string serverid);
+        Lwt_log.ign_debug_f ~section "using connection to server %s"
+                                     (Conf.serverid_to_string serverid);
         Lwt.catch
           (fun () -> Resource_pool.use ?usage_attempts connections f)
           (fun e -> match e with
