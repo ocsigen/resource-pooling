@@ -405,12 +405,9 @@ let use ?(creation_attempts = 1) ?(usage_attempts = 1) p f =
     Lwt.catch
       (fun () -> f c >>= fun res -> Lwt.return (c,res))
       (fun e -> match e with
-         | Resource_invalid {safe = true} ->
-             dispose p c >>= fun () ->
-             make_promise (attempts - 1)
-         | Resource_invalid {safe = false} ->
+         | Resource_invalid {safe} ->
              check_and_release p c !cleared >>= fun () ->
-             Lwt.fail e
+             if safe then make_promise (attempts - 1) else Lwt.fail e
          | e -> Lwt.fail e)
   in
   let promise = make_promise usage_attempts in
