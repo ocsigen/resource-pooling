@@ -1,6 +1,6 @@
 opam-version: "2.0"
 name: "resource-pooling"
-version: "0.4.1"
+version: "0.5"
 maintainer: "Jan Rochel <jan@besport.com>"
 authors: [ "Jan Rochel (BeSport)" ]
 synopsis: "Library for pooling resources like connections, threads, or similar"
