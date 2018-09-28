@@ -46,15 +46,15 @@ module Make (Conf : CONF) = struct
 
   let servers : (Conf.serverid, server_status) Hashtbl.t = Hashtbl.create 9
 
+  let get_status serverid = Hashtbl.find_opt servers serverid
+
   let remove serverid =
     Lwt_log.ign_notice_f ~section "removing server %s" (show serverid);
     Hashtbl.remove servers serverid
 
   let update_current_count serverid f =
-    let status =
-      let old_status = Hashtbl.find servers serverid in
-      {old_status with current = f old_status.current}
-    in
+    match get_status serverid with None -> () | Some status ->
+    let status = {status with current = f status.current} in
     Hashtbl.replace servers serverid status;
     Lwt_log.ign_info_f ~section "current number of instances for %s: %d/%d"
                                 (show serverid) status.current status.desired
@@ -73,8 +73,9 @@ module Make (Conf : CONF) = struct
       update_current_count serverid pred;
       Lwt.return_unit
     and check {serverid} f = (* retire non-essential servers *)
-      let status = Hashtbl.find servers serverid in
-      f status.essential
+      match get_status serverid with
+      | None -> f false
+      | Some status -> f status.essential
     in Resource_pool.create ~check ~dispose n nil
 
   let server_exists serverid = Hashtbl.mem servers serverid
@@ -92,10 +93,10 @@ module Make (Conf : CONF) = struct
       let close_connections_r = ref Lwt.return in
       let reactivate_server_r = ref Lwt.return in
       let suspend_server () =
-        let server = Hashtbl.find servers serverid in
-        if server.essential || server.suspended then () else begin
+        match get_status serverid with None -> () | Some status ->
+        if status.essential || status.suspended then () else begin
           Lwt_log.ign_notice_f ~section "suspending %s" (show serverid);
-          Hashtbl.replace servers serverid {server with suspended = true};
+          Hashtbl.replace servers serverid {status with suspended = true};
           Lwt.async @@ fun () ->
             !close_connections_r () >>= fun () ->
             !reactivate_server_r ()
@@ -127,9 +128,9 @@ module Make (Conf : CONF) = struct
         >>= fun healthy ->
         if healthy
           then begin
+            match get_status serverid with None -> Lwt.return_unit | Some status ->
             Lwt_log.ign_info_f ~section
               "reactivating healthy server %s" (show serverid);
-            let status = Hashtbl.find servers serverid in
             Hashtbl.replace servers serverid {status with suspended = false};
             for _ = status.current to status.desired - 1 do
               Resource_pool.add ~omit_max_check:true server_pool pool;
@@ -178,10 +179,7 @@ module Make (Conf : CONF) = struct
        erased, where [n] equals the value used for [num_conn] when the server
        was added. *)
     Resource_pool.use ~usage_attempts:9 server_pool @@ fun {serverid; connections} ->
-      let server_o = try Some (Hashtbl.find servers serverid)
-                     with Not_found -> None
-      in
-      match server_o with
+      match get_status serverid with
       | None ->
           Lwt_log.ign_info_f ~section "cannot use %s (removed)" (show serverid);
           Lwt.fail Resource_pool.(Resource_invalid {safe = true})
