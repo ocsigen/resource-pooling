@@ -56,8 +56,8 @@ module Make (Conf : CONF) = struct
     match get_status serverid with None -> () | Some status ->
     let status = {status with current = f status.current} in
     Hashtbl.replace servers serverid status;
-    Lwt_log.ign_info_f ~section "current number of instances for %s: %d/%d"
-                                (show serverid) status.current status.desired
+    Lwt_log.ign_debug_f ~section "current number of instances for %s: %d/%d"
+                                 (show serverid) status.current status.desired
 
   (* Each server holds its own connection_pool, so a server pool is a pool of
      connection pools. HOWEVER, [server_pool] will not contain one
@@ -95,7 +95,7 @@ module Make (Conf : CONF) = struct
       let suspend_server () =
         match get_status serverid with None -> () | Some status ->
         if status.essential || status.suspended then () else begin
-          Lwt_log.ign_notice_f ~section "suspending %s" (show serverid);
+          Lwt_log.ign_warning_f ~section "suspending %s" (show serverid);
           Hashtbl.replace servers serverid {status with suspended = true};
           Lwt.async @@ fun () ->
             !close_connections_r () >>= fun () ->
@@ -129,7 +129,7 @@ module Make (Conf : CONF) = struct
         if healthy
           then begin
             match get_status serverid with None -> Lwt.return_unit | Some status ->
-            Lwt_log.ign_info_f ~section
+            Lwt_log.ign_notice_f ~section
               "reactivating healthy server %s" (show serverid);
             Hashtbl.replace servers serverid {status with suspended = false};
             for _ = status.current to status.desired - 1 do
