@@ -370,14 +370,14 @@ let acquire ~attempts p =
       let c = Queue.take p.list in
       validate_and_return p c
   in
-  let rec keep_trying resource_invalid attempts =
+  let rec keep_trying ?(e = Resource_invalid {safe = true}) attempts =
     if attempts > 0
       then Lwt.catch once @@ fun e ->
         match e with
-        | Resource_invalid {safe = true} -> keep_trying e (attempts - 1)
+        | Resource_invalid {safe = true} -> keep_trying ~e (attempts - 1)
         | e -> Lwt.fail e
-      else Lwt.fail resource_invalid
-  in keep_trying (Resource_invalid {safe = true} (*unused*)) attempts
+      else Lwt.fail e
+  in keep_trying attempts
 
 (* Release a member when use resulted in failed promise if the member
    is still valid. *)
