@@ -116,6 +116,7 @@ module Make (Conf : CONF) = struct
       let close_connections () = Resource_pool.clear conn_pool in
       close_connections_r := close_connections;
       let rec reactivate_server () =
+        if not @@ server_exists serverid then Lwt.return_unit else
         Lwt_unix.sleep Conf.check_delay >>= fun () ->
         Lwt_log.ign_debug_f ~section "checking server health of %s" (show serverid);
         Lwt.catch
