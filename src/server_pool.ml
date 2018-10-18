@@ -172,6 +172,7 @@ module Make (Conf : CONF) = struct
     done
 
   let use ?usage_attempts f =
+    Lwt_log.ign_debug ~section "Server_pool.use";
     (* We use retry here, since elements cannot be removed from an
        [Resource_pool.t] directly. Therefore we detect whether a server has been
        removed by our own means and try again with another server it this was
@@ -180,6 +181,7 @@ module Make (Conf : CONF) = struct
        erased, where [n] equals the value used for [num_conn] when the server
        was added. *)
     Resource_pool.use ~usage_attempts:9 server_pool @@ fun {serverid; connections} ->
+      Lwt_log.ign_debug ~section "Server_pool.Resource_pool.use";
       match get_status serverid with
       | None ->
           Lwt_log.ign_info_f ~section "cannot use %s (removed)" (show serverid);
