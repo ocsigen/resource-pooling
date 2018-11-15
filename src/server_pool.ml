@@ -147,7 +147,9 @@ module Make (Conf : CONF) = struct
           Lwt.async @@ fun () ->
             connect () >>= fun c ->
             try Resource_pool.add conn_pool c; Lwt.return_unit
-            with Resource_pool.Resource_limit_exceeded -> dispose c
+            with Resource_pool.Resource_limit_exceeded ->
+       print_endline "G";
+              dispose c
         done;
       pool
     in
@@ -193,7 +195,9 @@ module Make (Conf : CONF) = struct
         Lwt_log.ign_debug_f ~section "using connection to %s" (show serverid);
         Lwt.catch
           (fun () -> Resource_pool.use ?usage_attempts connections f)
-          (fun e -> match e with
+          (fun e -> 
+       print_endline "F";
+            match e with
              | Resource_pool.(Resource_invalid {safe = true}) ->
                  Lwt_log.ign_warning
                    "connection unusable (safe to retry using another server)";
@@ -202,7 +206,9 @@ module Make (Conf : CONF) = struct
                  Lwt_log.ign_warning
                    "connection unusable (unsafe to retry using another server)";
                  Lwt.fail e
-             | e -> Lwt.fail e
+             | e ->
+       print_endline "G";
+                 Lwt.fail e
           )
 
   let servers () = Hashtbl.fold (fun server _ l -> server :: l) servers []

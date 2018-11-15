@@ -283,6 +283,7 @@ let create_member p =
        p.count <- p.count + 1;
        p.create ())
     (fun exn ->
+       print_endline "A";
        (* Creation failed, so don't increment count. *)
        p.count <- p.count - 1;
        Lwt.fail exn)
@@ -373,6 +374,7 @@ let acquire ~attempts p =
   let rec keep_trying ?(e = Resource_invalid {safe = true}) attempts =
     if attempts > 0
       then Lwt.catch once @@ fun e ->
+       print_endline "B";
         match e with
         | Resource_invalid {safe = true} -> keep_trying ~e (attempts - 1)
         | e -> Lwt.fail e
@@ -400,14 +402,21 @@ let use ?(creation_attempts = 1) ?(usage_attempts = 1) p f =
   (* Capture the current cleared state so we can see if it changes while this
      element is in use *)
   let rec make_promise attempts =
-    if attempts <= 0 then Lwt.fail @@ Resource_invalid {safe = true} else
+    if attempts <= 0 then begin
+       print_endline "D";
+      Lwt.fail @@ Resource_invalid {safe = true}
+    end
+  else
     acquire ~attempts:creation_attempts p >>= fun c ->
     Lwt.catch
       (fun () -> f c >>= fun res -> Lwt.return (c,res))
       (fun e ->
+       print_endline "C";
          check_and_release p c !cleared >>= fun () ->
          match e with
-         | Resource_invalid {safe = true} -> make_promise (attempts - 1)
+         | Resource_invalid {safe = true} ->
+           print_endline "E";
+             make_promise (attempts - 1)
          | e -> Lwt.fail e)
   in
   let promise = make_promise usage_attempts in
