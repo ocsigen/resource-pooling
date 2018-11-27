@@ -58,6 +58,7 @@ module Make (Conf : CONF) : sig
   (* Add a server for which a connection pool already exists *)
   val add_existing :
     ?essential:bool ->
+    ?check_server : (unit -> bool Lwt.t) ->
     num_conn:int -> Conf.serverid -> Conf.connection Resource_pool.t -> unit
 
   (* If [Resource_invalid] is raised by the supplied function, the connection is

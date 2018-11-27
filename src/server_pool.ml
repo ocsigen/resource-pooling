@@ -38,11 +38,12 @@ module Make (Conf : CONF) = struct
     desired : int;
     current : int;
     essential : bool;
-    suspended : bool
+    suspended : bool;
+    check_server : unit -> bool Lwt.t
   }
 
-  let server_status ~desired ~essential =
-    {desired; current = 0; essential; suspended = false}
+  let server_status ~desired ~essential ~check_server =
+    {desired; current = 0; essential; suspended = false; check_server}
 
   let servers : (Conf.serverid, server_status) Hashtbl.t = Hashtbl.create 9
 
@@ -90,58 +91,16 @@ module Make (Conf : CONF) = struct
         Conf.connect server >>= fun conn ->
         Lwt.return conn
       in
-      let close_connections_r = ref Lwt.return in
-      let reactivate_server_r = ref Lwt.return in
-      let suspend_server () =
-        match get_status serverid with None -> () | Some status ->
-        if status.essential || status.suspended then () else begin
-          Lwt_log.ign_warning_f ~section "suspending %s" (show serverid);
-          Hashtbl.replace servers serverid {status with suspended = true};
-          Lwt.async @@ fun () ->
-            !close_connections_r () >>= fun () ->
-            !reactivate_server_r ()
-        end
-      in
       let dispose conn =
         Lwt_log.ign_info_f ~section "closing connection to %s" (show serverid);
-        Lwt.catch (fun () -> Conf.close conn) (fun _ -> Lwt.return_unit) >>= fun () ->
-        suspend_server ();
-        Lwt.return_unit
+        Lwt.catch (fun () -> Conf.close conn) (fun _ -> Lwt.return_unit)
       in
-      let status = server_status ~desired:num_conn ~essential in
+      let check_server () = Conf.check_server serverid server in
+      let status = server_status ~desired:num_conn ~essential ~check_server in
       Hashtbl.add servers serverid status;
       let check _ f = f false in (* always close connections *)
       let conn_pool = Resource_pool.create num_conn ~check ~dispose connect in
       let pool = {serverid; connections = conn_pool} in
-      let close_connections () = Resource_pool.clear conn_pool in
-      close_connections_r := close_connections;
-      let rec reactivate_server () =
-        if not @@ server_exists serverid then Lwt.return_unit else
-        Lwt_unix.sleep Conf.check_delay >>= fun () ->
-        Lwt_log.ign_debug_f ~section "checking server health of %s" (show serverid);
-        Lwt.catch
-          (fun () -> Conf.check_server serverid server)
-          (fun e ->
-             Lwt_log.ign_info_f ~section
-               "exception during health check of %s: %s"
-               (show serverid) (Printexc.to_string e);
-             Lwt.return_false)
-        >>= fun healthy ->
-        if healthy
-          then begin
-            match get_status serverid with None -> Lwt.return_unit | Some status ->
-            Lwt_log.ign_notice_f ~section
-              "reactivating healthy server %s" (show serverid);
-            Hashtbl.replace servers serverid {status with suspended = false};
-            for _ = status.current to status.desired - 1 do
-              Resource_pool.add ~omit_max_check:true server_pool pool;
-              update_current_count serverid succ
-            done;
-            Lwt.return_unit
-          end
-          else reactivate_server ()
-      in
-      reactivate_server_r := reactivate_server;
       if connect_immediately then
         for _ = 1 to num_conn do
           Lwt.async @@ fun () ->
@@ -162,14 +121,56 @@ module Make (Conf : CONF) = struct
   let add_one ?essential ?connect_immediately ~num_conn serverid server =
     add_many ?essential ?connect_immediately ~num_conn [(serverid, server)]
 
-  let add_existing ?(essential = false) ~num_conn serverid connections =
+  let add_existing
+      ?(essential = false) ?(check_server = fun () -> Lwt.return_true)
+      ~num_conn serverid connections =
     Lwt_log.ign_notice_f ~section "adding existing server: %s" (show serverid);
-    let status = server_status ~desired:num_conn ~essential in
+    let status = server_status ~desired:num_conn ~essential ~check_server in
     Hashtbl.add servers serverid status;
     for _ = 1 to num_conn do
       Resource_pool.add ~omit_max_check:true server_pool {serverid; connections};
       update_current_count serverid succ
     done
+
+  let reactivate_server ~check_server connection_pool =
+    let serverid = connection_pool.serverid in
+    let check () =
+      Lwt_unix.sleep Conf.check_delay >>= fun () ->
+      Lwt_log.ign_debug_f ~section "checking server health of %s" (show serverid);
+      Lwt.catch
+        check_server
+        (fun e ->
+           Lwt_log.ign_info_f ~section
+             "exception during health check of %s: %s"
+             (show serverid) (Printexc.to_string e);
+           Lwt.return_false)
+    in
+    let reactivate () =
+      match get_status serverid with None -> Lwt.return_unit | Some status ->
+      Lwt_log.ign_notice_f ~section
+        "reactivating healthy server %s" (show serverid);
+      Hashtbl.replace servers serverid {status with suspended = false};
+      for _ = status.current to status.desired - 1 do
+        Resource_pool.add ~omit_max_check:true server_pool connection_pool;
+        update_current_count serverid succ
+      done;
+      Lwt.return_unit
+    in
+    let rec loop () =
+      if not @@ server_exists serverid then Lwt.return_unit else
+      check () >>= fun healthy -> if healthy then reactivate () else loop ()
+    in loop ()
+
+  let suspend_server ~check_server connection_pool =
+    let serverid = connection_pool.serverid in
+    match get_status serverid with None -> () | Some status ->
+    if status.essential || status.suspended then () else begin
+      Lwt_log.ign_warning_f ~section "suspending %s" (show serverid);
+      Hashtbl.replace servers serverid {status with suspended = true};
+      Lwt.async @@ fun () ->
+        Resource_pool.clear connection_pool.connections >>= fun () ->
+        reactivate_server ~check_server connection_pool
+    end
 
   let use ?usage_attempts f =
     (* We use retry here, since elements cannot be removed from an
@@ -179,7 +180,8 @@ module Make (Conf : CONF) = struct
        will be [n] such retries before all traces of a server have been
        erased, where [n] equals the value used for [num_conn] when the server
        was added. *)
-    Resource_pool.use ~usage_attempts:9 server_pool @@ fun {serverid; connections} ->
+    Resource_pool.use ~usage_attempts:9 server_pool @@ fun connection_pool ->
+      let {serverid; connections} = connection_pool in
       match get_status serverid with
       | None ->
           Lwt_log.ign_info_f ~section "cannot use %s (removed)" (show serverid);
@@ -187,7 +189,7 @@ module Make (Conf : CONF) = struct
       | Some {suspended = true} ->
           Lwt_log.ign_info_f ~section "not using %s (suspended)" (show serverid);
           Lwt.fail Resource_pool.(Resource_invalid {safe = true})
-      | Some _ ->
+      | Some {check_server} ->
         Lwt_log.ign_debug_f ~section "using connection to %s" (show serverid);
         Lwt.catch
           (fun () -> Resource_pool.use ?usage_attempts connections f)
@@ -199,6 +201,7 @@ module Make (Conf : CONF) = struct
              | Resource_pool.(Resource_invalid {safe = false}) ->
                  Lwt_log.ign_warning
                    "connection unusable (unsafe to retry using another server)";
+                 suspend_server ~check_server connection_pool;
                  Lwt.fail e
              | e -> Lwt.fail e
           )
