@@ -105,7 +105,7 @@ module Make (Conf : CONF) = struct
       let check_server () = Conf.check_server serverid server in
       let status = server_status ~desired:num_conn ~essential ~check_server in
       Hashtbl.add servers serverid status;
-      let check _ f = f false in (* always close connections *)
+      let check _ f = f true in (* never close connections *)
       let conn_pool = Resource_pool.create num_conn ~check ~dispose connect in
       let pool = {serverid; connections = conn_pool} in
       if connect_immediately then
