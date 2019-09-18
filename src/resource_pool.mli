@@ -127,3 +127,7 @@ val add : ?omit_max_check:bool -> 'a t -> 'a -> unit
 val wait_queue_length : _ t -> int
   (** [wait_queue_length p] returns the number of {!use} requests currently
       waiting for an element of the pool [p] to become available. *)
+
+val wait_queue_delay : _ t -> float
+  (** [wait_queue_length p] returns the age of the oldest {!use} request
+      currently waiting for an element of the pool [p] to become available. *)
