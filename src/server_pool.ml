@@ -51,6 +51,19 @@ module Make (Conf : CONF) = struct
 
   let get_status serverid = Hashtbl.find_opt servers serverid
 
+  let connection_pool_of_server serverid =
+    match get_status serverid with
+    | None -> None
+    | Some {connection_pool} -> Some connection_pool
+
+  let non_essential_active_connection_pools () =
+    let accum serverid {essential; suspended; connection_pool} acc =
+      if not essential && not suspended
+        then (serverid, connection_pool) :: acc
+        else acc
+    in
+    Hashtbl.fold accum servers []
+
   let remove serverid =
     Lwt_log.ign_notice_f ~section "removing server %s" (show serverid);
     Hashtbl.remove servers serverid

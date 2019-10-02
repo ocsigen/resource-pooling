@@ -36,6 +36,8 @@ module Make (Conf : CONF) : sig
       to use that server might still occur. These are NOT connection attempts,
       so this does not come with substantial costs. *)
   val remove : Conf.serverid -> unit
+  val non_essential_active_connection_pools :
+        unit -> (Conf.serverid * Conf.connection Resource_pool.t) list
 
   (** Adds a server to the pool, permitting a maximum number [num_conn] of
       concurrent connections to that server. If [connect_immediately] is [true]
