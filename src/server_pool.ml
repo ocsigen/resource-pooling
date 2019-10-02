@@ -39,11 +39,13 @@ module Make (Conf : CONF) = struct
     current : int;
     essential : bool;
     suspended : bool;
-    check_server : unit -> bool Lwt.t
+    check_server : unit -> bool Lwt.t;
+    connection_pool : Conf.connection Resource_pool.t;
   }
 
-  let server_status ~desired ~essential ~check_server =
-    {desired; current = 0; essential; suspended = false; check_server}
+  let server_status ~desired ~essential ~check_server ~connection_pool =
+    {desired; current = 0; essential; suspended = false; check_server;
+     connection_pool}
 
   let servers : (Conf.serverid, server_status) Hashtbl.t = Hashtbl.create 9
 
@@ -103,10 +105,13 @@ module Make (Conf : CONF) = struct
         Lwt.catch (fun () -> Conf.close conn) (fun _ -> Lwt.return_unit)
       in
       let check_server () = Conf.check_server serverid server in
-      let status = server_status ~desired:num_conn ~essential ~check_server in
-      Hashtbl.add servers serverid status;
       let check _ f = f true in (* never close connections *)
       let conn_pool = Resource_pool.create num_conn ~check ~dispose connect in
+      let status =
+        server_status
+          ~desired:num_conn ~essential ~check_server ~connection_pool:conn_pool
+      in
+      Hashtbl.add servers serverid status;
       let pool = {serverid; connections = conn_pool} in
       if connect_immediately then
         for _ = 1 to num_conn do
@@ -132,7 +137,10 @@ module Make (Conf : CONF) = struct
       ?(essential = false) ?(check_server = fun () -> Lwt.return_true)
       ~num_conn serverid connections =
     Lwt_log.ign_notice_f ~section "adding existing server: %s" (show serverid);
-    let status = server_status ~desired:num_conn ~essential ~check_server in
+    let status =
+      server_status
+        ~desired:num_conn ~essential ~check_server ~connection_pool:connections
+    in
     Hashtbl.add servers serverid status;
     for _ = 1 to num_conn do
       Resource_pool.add ~omit_max_check:true server_pool {serverid; connections};
