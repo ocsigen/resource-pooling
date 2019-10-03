@@ -112,6 +112,14 @@ let take_opt_r seq =
     Some node.node_data
   end
 
+let peek_opt_l seq =
+  if is_empty seq then
+    None
+  else begin
+    let node = node_of_seq seq.next in
+    Some node.node_data
+  end
+
 let transfer_l s1 s2 =
   s2.next.prev <- s1.prev;
   s1.prev.next <- s2.next;
@@ -255,7 +263,7 @@ type 'a t = {
   (* Number of elements in the pool. *)
   list : 'a Queue.t;
   (* Available pool members. *)
-  waiters : 'a Lwt.u Sequence.t;
+  waiters : ('a Lwt.u * float) Sequence.t;
   (* Promise resolvers waiting for a free member. *)
 }
 
@@ -290,7 +298,7 @@ let create_member p =
 (* Release a pool member. *)
 let release p c =
   match Sequence.take_opt_l p.waiters with
-  | Some wakener ->
+  | Some (wakener, _) ->
     (* A promise resolver is waiting, give it the pool member. *)
     Lwt.wakeup_later wakener c
   | None ->
@@ -317,7 +325,7 @@ let replace_disposed p =
     (* No one is waiting, do not create a new member to avoid
        losing an error if creation fails. *)
     ()
-  | Some wakener ->
+  | Some (wakener, _) ->
     Lwt.on_any
       (Lwt.apply p.create ())
       (fun c ->
@@ -349,7 +357,7 @@ exception Resource_invalid of {safe : bool}
 
 let add_task_r sequence =
   let p, r = Lwt.task () in
-  let node = Sequence.add_r r sequence in
+  let node = Sequence.add_r (r, Unix.gettimeofday ()) sequence in
   Lwt.on_cancel p (fun () -> Sequence.remove node);
   p
 
@@ -432,3 +440,7 @@ let clear p =
   Lwt_list.iter_s (dispose p) elements
 
 let wait_queue_length p = Sequence.length p.waiters
+let wait_queue_delay p =
+  match Sequence.peek_opt_l p.waiters with
+  | None -> 0.
+  | Some (_, d) -> Unix.gettimeofday () -. d
