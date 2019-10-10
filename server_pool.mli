@@ -31,11 +31,13 @@ end
 module Make (Conf : CONF) : sig
   val servers : unit -> Conf.serverid list
   val server_exists : Conf.serverid -> bool
+
   (** [remove] marks a given server as removed from the pool. HOWEVER, a number
       of attempts (corresponding to the number of connections to that server)
       to use that server might still occur. These are NOT connection attempts,
       so this does not come with substantial costs. *)
   val remove : Conf.serverid -> unit
+
   val non_essential_active_connection_pools :
         unit -> (Conf.serverid * Conf.connection Resource_pool.t) list
 

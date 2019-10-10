@@ -18,7 +18,7 @@ module type CONF = sig
   type connection
   type server
   type serverid
-  val serverid_to_string : serverid -> string (** for debugging info *)
+  val serverid_to_string : serverid -> string
   val connect : server -> connection Lwt.t
   val close : connection -> unit Lwt.t
   val check_delay : float
@@ -50,11 +50,6 @@ module Make (Conf : CONF) = struct
   let servers : (Conf.serverid, server_status) Hashtbl.t = Hashtbl.create 9
 
   let get_status serverid = Hashtbl.find_opt servers serverid
-
-  let connection_pool_of_server serverid =
-    match get_status serverid with
-    | None -> None
-    | Some {connection_pool} -> Some connection_pool
 
   let non_essential_active_connection_pools () =
     let accum serverid {essential; suspended; connection_pool} acc =
