@@ -12,6 +12,7 @@ bug-reports: "https://github.com/ocsigen/resource-pooling/issues"
 build: [["dune" "build" "-j" jobs]]
 depends: [
   "ocaml" {>= "4.06"}
+  "dune"
   "lwt" {>= "2.4.7"}
   "lwt_log"
   "ocamlbuild" {build}

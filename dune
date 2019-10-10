@@ -1,5 +1,6 @@
 (library
  (name resource_pooling)
  (public_name resource-pooling)
+ (modules resource_pool server_pool)
  (libraries lwt lwt_log)
 )
