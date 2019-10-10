@@ -9,14 +9,7 @@ license: "MIT"
 homepage: "https://github.com/ocsigen/resource-pooling"
 dev-repo: "git+https://github.com/ocsigen/resource-pooling.git"
 bug-reports: "https://github.com/ocsigen/resource-pooling/issues"
-build: [
-  ["ocaml" "setup.ml" "-configure" "--prefix" prefix]
-  ["ocaml" "setup.ml" "-build"]
-]
-install: ["ocaml" "setup.ml" "-install"]
-remove: [
-  ["ocamlfind" "remove" "resource-pooling"]
-]
+build: [["dune" "build" "-j" jobs]]
 depends: [
   "ocaml" {>= "4.06"}
   "lwt" {>= "2.4.7"}
@@ -24,4 +17,3 @@ depends: [
   "ocamlbuild" {build}
   "ocamlfind" {build}
 ]
-flags: light-uninstall
