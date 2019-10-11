@@ -29,32 +29,29 @@ module Make (Conf : CONF) = struct
 
   let show = Conf.serverid_to_string
 
-  type connection_pool = {
-    serverid : Conf.serverid;
-    connections : Conf.connection Resource_pool.t
-  }
-
   type server_status = {
+    serverid : Conf.serverid;
     desired : int;
     current : int;
     essential : bool;
     suspended : bool;
     check_server : unit -> bool Lwt.t;
-    connection_pool : Conf.connection Resource_pool.t;
+    connections : Conf.connection Resource_pool.t;
   }
 
-  let server_status ~desired ~essential ~check_server ~connection_pool =
-    {desired; current = 0; essential; suspended = false; check_server;
-     connection_pool}
+  let mk_server_status
+        ~serverid ~desired ~essential ~check_server ~connections =
+    {serverid = serverid; desired; current = 0; essential; suspended = false;
+     check_server; connections}
 
   let servers : (Conf.serverid, server_status) Hashtbl.t = Hashtbl.create 9
 
   let get_status serverid = Hashtbl.find_opt servers serverid
 
   let non_essential_active_connection_pools () =
-    let accum serverid {essential; suspended; connection_pool} acc =
+    let accum serverid {essential; suspended; connections} acc =
       if not essential && not suspended
-        then (serverid, connection_pool) :: acc
+        then (serverid, connections) :: acc
         else acc
     in
     Hashtbl.fold accum servers []
@@ -74,7 +71,7 @@ module Make (Conf : CONF) = struct
      connection pools. HOWEVER, [server_pool] will not contain one
      connection pool per server, but [n] times the same connection pool per
      server, where [n] is the (maximum) size of the servers connection pool. *)
-  let server_pool : connection_pool Resource_pool.t =
+  let server_pool : server_status Resource_pool.t =
     let nil () = failwith "Bs_db.server_pool: invalid connection attempt" in
     (* We supply [0] as the first argument to [Resource_pool.create] as it will
        prevent [Resource_pool] to ever create a new resource on its own. This is what
@@ -100,7 +97,7 @@ module Make (Conf : CONF) = struct
   let add_many
       ?(essential = false)
       ?(connect_immediately = false) ~num_conn new_servers =
-    let mk_connection_pool (serverid, server) : connection_pool =
+    let mk_connection_pool (serverid, server) : server_status =
       Lwt_log.ign_notice_f ~section "adding server: %s" (show serverid);
       let connect () =
         Lwt_log.ign_info_f ~section "opening connection to %s" (show serverid);
@@ -114,21 +111,20 @@ module Make (Conf : CONF) = struct
       in
       let check_server () = Conf.check_server serverid server in
       let check _ f = f true in (* never close connections *)
-      let conn_pool = Resource_pool.create num_conn ~check ~dispose connect in
+      let connections = Resource_pool.create num_conn ~check ~dispose connect in
       let status =
-        server_status
-          ~desired:num_conn ~essential ~check_server ~connection_pool:conn_pool
+        mk_server_status
+          ~serverid ~desired:num_conn ~essential ~check_server ~connections
       in
       Hashtbl.add servers serverid status;
-      let pool = {serverid; connections = conn_pool} in
       if connect_immediately then
         for _ = 1 to num_conn do
           Lwt.async @@ fun () ->
             connect () >>= fun c ->
-            try Resource_pool.add conn_pool c; Lwt.return_unit
+            try Resource_pool.add connections c; Lwt.return_unit
             with Resource_pool.Resource_limit_exceeded -> dispose c
         done;
-      pool
+      status
     in
     let pools = List.map mk_connection_pool @@
       List.filter (fun l -> not @@ server_exists @@ fst l) new_servers in
@@ -146,12 +142,12 @@ module Make (Conf : CONF) = struct
       ~num_conn serverid connections =
     Lwt_log.ign_notice_f ~section "adding existing server: %s" (show serverid);
     let status =
-      server_status
-        ~desired:num_conn ~essential ~check_server ~connection_pool:connections
+      mk_server_status
+        ~serverid ~desired:num_conn ~essential ~check_server ~connections
     in
     Hashtbl.add servers serverid status;
     for _ = 1 to num_conn do
-      Resource_pool.add ~omit_max_check:true server_pool {serverid; connections};
+      Resource_pool.add ~omit_max_check:true server_pool status;
       update_current_count serverid succ
     done
 
