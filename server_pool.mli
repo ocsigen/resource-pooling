@@ -29,6 +29,16 @@ module type CONF = sig
 end
 
 module Make (Conf : CONF) : sig
+  type server_status = {
+    serverid : Conf.serverid;
+    desired : int;
+    current : int;
+    essential : bool;
+    suspended : bool;
+    check_server : unit -> bool Lwt.t;
+    connections : Conf.connection Resource_pool.t;
+  }
+
   val servers : unit -> Conf.serverid list
   val server_exists : Conf.serverid -> bool
 
