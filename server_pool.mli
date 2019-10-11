@@ -40,6 +40,7 @@ module Make (Conf : CONF) : sig
   }
 
   val servers : unit -> Conf.serverid list
+  val server_statuses : unit -> server_status list
   val server_exists : Conf.serverid -> bool
 
   (** [remove] marks a given server as removed from the pool. HOWEVER, a number

@@ -225,6 +225,9 @@ module Make (Conf : CONF) = struct
              | e -> Lwt.fail e
           )
 
-  let servers () = Hashtbl.fold (fun server _ l -> server :: l) servers []
+  let server_statuses () =
+    Hashtbl.fold (fun _ status l -> status :: l) servers []
+  let servers () =
+    Hashtbl.fold (fun server _ l -> server :: l) servers []
 
 end
