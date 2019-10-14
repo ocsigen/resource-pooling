@@ -203,23 +203,28 @@ module Make (Conf : CONF) = struct
       let {serverid; connections} = connection_pool in
       match get_status serverid with
       | None ->
-          Lwt_log.ign_info_f ~section "cannot use %s (removed)" (show serverid);
+          Lwt_log.info_f ~section "cannot use %s (removed)" (show serverid)
+          >>= fun () ->
           Lwt.fail Resource_pool.(Resource_invalid {safe = true})
       | Some {suspended = true} ->
-          Lwt_log.ign_info_f ~section "not using %s (suspended)" (show serverid);
+          Lwt_log.info_f ~section "not using %s (suspended)" (show serverid)
+          >>= fun () ->
           Lwt.fail Resource_pool.(Resource_invalid {safe = true})
       | Some {check_server} ->
-        Lwt_log.ign_debug_f ~section "using connection to %s" (show serverid);
+        Lwt_log.debug_f ~section "using connection to %s" (show serverid)
+        >>= fun () ->
         Lwt.catch
           (fun () -> Resource_pool.use ?usage_attempts connections f)
           (fun e -> match e with
              | Resource_pool.(Resource_invalid {safe = true}) ->
-                 Lwt_log.ign_warning
-                   "connection unusable (safe to retry using another server)";
+                 Lwt_log.warning
+                   "connection unusable (safe to retry using another server)"
+                 >>= fun () ->
                  Lwt.fail e
              | Resource_pool.(Resource_invalid {safe = false}) ->
-                 Lwt_log.ign_warning
-                   "connection unusable (unsafe to retry using another server)";
+                 Lwt_log.warning
+                   "connection unusable (unsafe to retry using another server)"
+                 >>= fun () ->
                  suspend_server ~check_server connection_pool;
                  Lwt.fail e
              | e -> Lwt.fail e
