@@ -42,8 +42,13 @@ let () =
 
 let num_conn = 2
 let replica_num = ref 1
+let master_num = ref 1
 
 module Actions = struct
+  let add_master () =
+    let serverid = Printf.sprintf "m%d" !master_num in
+    master_num := !master_num + 1;
+    Server_pool.add_one ~essential:true ~connect_immediately:true ~num_conn serverid serverid
   let add_replica () =
     let serverid = Printf.sprintf "rr%d" !replica_num in
     replica_num := !replica_num + 1;
@@ -84,13 +89,15 @@ let rec print_status () =
 and menu = [
   "print status",
     print_status;
+  "add master",
+    Actions.add_master;
   "add replica",
     Actions.add_replica;
   "use pool",
     Actions.use_pool ?exc:None;
   "use pool (exception, retry)",
     Actions.use_pool ~exc:(resource_invalid true);
-  "use pool (exception, retry)",
+  "use pool (exception, no retry)",
     Actions.use_pool ~exc:(resource_invalid false)
 ]
 
