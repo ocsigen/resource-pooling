@@ -41,7 +41,7 @@ type 'a t
 
 val create :
   ?validate : ('a -> bool Lwt.t) ->
-  ?check : ('a -> (bool -> unit) -> unit) ->
+  ?check : (exn -> 'a -> bool Lwt.t) ->
   ?dispose : ('a -> unit Lwt.t) ->
   int ->
   (unit -> 'a Lwt.t) -> 'a t

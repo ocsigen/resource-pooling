@@ -80,16 +80,18 @@ module Make (Conf : CONF) = struct
     and dispose {serverid} =
       update_current_count serverid pred;
       Lwt.return_unit
-    and check {serverid} f =
+    and check _ {serverid = _} =
+      (*
       let _retire_non_essential_servers () =
         match get_status serverid with
         | None -> f false
         | Some status -> f status.essential
       in
+       *)
       (* For now, do not dispose of servers upon Resource_invalid {safe =
          true} as there is currently no mechanism for reinstating them.
          Potentially it might be advisable to dispose of them temporarily. *)
-      f true
+      Lwt.return_true
     in Resource_pool.create ~check ~dispose n nil
 
   let server_exists serverid = Hashtbl.mem servers serverid
@@ -110,7 +112,7 @@ module Make (Conf : CONF) = struct
         Lwt.catch (fun () -> Conf.close conn) (fun _ -> Lwt.return_unit)
       in
       let check_server () = Conf.check_server serverid server in
-      let check _ f = f true in (* never close connections *)
+      let check _ _ = Lwt.return_true in (* never close connections *)
       let connections = Resource_pool.create num_conn ~check ~dispose connect in
       let status =
         mk_server_status

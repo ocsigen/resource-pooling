@@ -249,7 +249,7 @@ open Lwt.Infix
 type 'a t = {
   create : unit -> 'a Lwt.t;
   (* Create a new pool member. *)
-  check : 'a -> (bool -> unit) -> unit;
+  check : exn -> 'a -> bool Lwt.t;
   (* Check validity of a pool member when use resulted in failed promise. *)
   validate : 'a -> bool Lwt.t;
   (* Validate an existing free pool member before use. *)
@@ -269,7 +269,7 @@ type 'a t = {
 
 let create
   ?(validate = fun _ -> Lwt.return_true)
-  ?(check = fun _ f -> f true)
+  ?(check = fun _ _ -> Lwt.return_true)
   ?(dispose = fun _ -> Lwt.return_unit)
   max
   create = {
@@ -389,10 +389,9 @@ let acquire ~attempts p =
 
 (* Release a member when use resulted in failed promise if the member
    is still valid. *)
-let check_and_release p c cleared =
-  let ok = ref false in
-  p.check c (fun result -> ok := result);
-  if cleared || not !ok then (
+let check_and_release e p c cleared =
+  p.check e c >>= fun ok ->
+  if !cleared || not ok then (
     (* Element is not ok or the pool was cleared - dispose of it *)
     dispose p c
   )
@@ -413,7 +412,7 @@ let use ?(creation_attempts = 1) ?(usage_attempts = 1) p f =
     Lwt.catch
       (fun () -> f c >>= fun res -> Lwt.return (c,res))
       (fun e ->
-         check_and_release p c !cleared >>= fun () ->
+         check_and_release e p c cleared >>= fun () ->
          match e with
          | Resource_invalid {safe = true} -> make_promise (attempts - 1)
          | e -> Lwt.fail e)
