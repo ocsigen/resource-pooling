@@ -1,3 +1,5 @@
+[@@@ocaml.warning "+A-9-44-48"]
+
 open BatPervasives
 module List = BatList
 
@@ -41,12 +43,17 @@ let () =
   Lwt_log.Section.set_level Resource_pooling.Server_pool.section Lwt_log.Debug
 
 let num_conn = 2
-let replica_num = ref 1
+let replica_count = ref 0
+let master_count = ref 0
 
 module Actions = struct
+  let add_master () =
+    let serverid = Printf.sprintf "m%d" !master_count in
+    master_count := !master_count + 1;
+    Server_pool.add_one ~essential:true ~connect_immediately:true ~num_conn serverid serverid
   let add_replica () =
-    let serverid = Printf.sprintf "rr%d" !replica_num in
-    replica_num := !replica_num + 1;
+    let serverid = Printf.sprintf "rr%d" !replica_count in
+    replica_count := !replica_count + 1;
     Server_pool.add_one ~connect_immediately:true ~num_conn serverid serverid
   let use_pool ?exc () =
     Lwt.async @@ fun () ->
@@ -68,6 +75,15 @@ module Actions = struct
     with e ->
       print_endline @@ Printexc.to_string e;
       Lwt.return_unit
+  let remove_latest_replica () =
+    let servers = Server_pool.server_statuses () in
+    try
+      let {Server_pool.serverid} =
+        List.find (fun {Server_pool.essential} -> not essential) servers
+      in
+      Server_pool.remove serverid
+    with Not_found ->
+      print_endline "no read replica found"
 end
 
 let resource_invalid safe =
@@ -84,14 +100,18 @@ let rec print_status () =
 and menu = [
   "print status",
     print_status;
+  "add master",
+    Actions.add_master;
   "add replica",
     Actions.add_replica;
   "use pool",
     Actions.use_pool ?exc:None;
   "use pool (exception, retry)",
     Actions.use_pool ~exc:(resource_invalid true);
-  "use pool (exception, retry)",
-    Actions.use_pool ~exc:(resource_invalid false)
+  "use pool (exception, no retry)",
+    Actions.use_pool ~exc:(resource_invalid false);
+  "remove latest replica",
+    Actions.remove_latest_replica
 ]
 
 let execute_action c =
