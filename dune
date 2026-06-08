@@ -1,4 +1,4 @@
 (library
  (name resource_pooling)
  (public_name resource-pooling)
- (libraries lwt logs logs.lwt))
+ (libraries lwt lwt.unix logs logs.lwt))
