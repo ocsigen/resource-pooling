@@ -10,8 +10,8 @@ to access one of the connections, which are served in a round-robin fashion.
 
 let (>>=) = Lwt.(>>=)
 
-let section = Lwt_log.Section.make "server-pool"
-let () = Lwt_log.Section.set_level section Lwt_log.Info
+let section = Logs.Src.create "server-pool"
+let () = Logs.Src.set_level section (Some Logs.Info)
 
 
 module type CONF = sig
@@ -57,15 +57,16 @@ module Make (Conf : CONF) = struct
     Hashtbl.fold accum servers []
 
   let remove serverid =
-    Lwt_log.ign_notice_f ~section "removing server %s" (show serverid);
+    Logs.info ~src:section (fun m -> m "removing server %s" (show serverid));
     Hashtbl.remove servers serverid
 
   let update_current_count serverid f =
     match get_status serverid with None -> () | Some status ->
     let status = {status with current = f status.current} in
     Hashtbl.replace servers serverid status;
-    Lwt_log.ign_debug_f ~section "current number of instances for %s: %d/%d"
-                                 (show serverid) status.current status.desired
+    Logs.debug ~src:section (fun m ->
+      m "current number of instances for %s: %d/%d"
+        (show serverid) status.current status.desired)
 
   (* Each server holds its own connection_pool, so a server pool is a pool of
      connection pools. HOWEVER, [server_pool] will not contain one
@@ -96,15 +97,17 @@ module Make (Conf : CONF) = struct
       ?(essential = false)
       ?(connect_immediately = false) ~num_conn new_servers =
     let mk_connection_pool (serverid, server) : server_status =
-      Lwt_log.ign_notice_f ~section "adding server: %s" (show serverid);
+      Logs.info ~src:section (fun m -> m "adding server: %s" (show serverid));
       let connect () =
-        Lwt_log.ign_info_f ~section "opening connection to %s" (show serverid);
+        Logs.info ~src:section
+          (fun m -> m "opening connection to %s" (show serverid));
         Conf.connect server >>= fun conn ->
         Lwt.return conn
       in
       let dispose conn =
         (* TODO: reopen closed connections if connect_immediately is true ? *)
-        Lwt_log.ign_info_f ~section "closing connection to %s" (show serverid);
+        Logs.info ~src:section
+          (fun m -> m "closing connection to %s" (show serverid));
         Lwt.catch (fun () -> Conf.close conn) (fun _ -> Lwt.return_unit)
       in
       let check_server () = Conf.check_server serverid server in
@@ -138,7 +141,8 @@ module Make (Conf : CONF) = struct
   let add_existing
       ?(essential = false) ?(check_server = fun () -> Lwt.return_true)
       ~num_conn serverid connections =
-    Lwt_log.ign_notice_f ~section "adding existing server: %s" (show serverid);
+    Logs.info ~src:section
+      (fun m -> m "adding existing server: %s" (show serverid));
     let status =
       mk_server_status
         ~serverid ~desired:num_conn ~essential ~check_server ~connections
@@ -153,19 +157,20 @@ module Make (Conf : CONF) = struct
     let serverid = connection_pool.serverid in
     let check () =
       Lwt_unix.sleep Conf.check_delay >>= fun () ->
-      Lwt_log.ign_debug_f ~section "checking server health of %s" (show serverid);
+      Logs.debug ~src:section
+        (fun m -> m "checking server health of %s" (show serverid));
       Lwt.catch
         check_server
         (fun e ->
-           Lwt_log.ign_info_f ~section
-             "exception during health check of %s: %s"
-             (show serverid) (Printexc.to_string e);
+           Logs.info ~src:section (fun m ->
+             m "exception during health check of %s: %s"
+               (show serverid) (Printexc.to_string e));
            Lwt.return_false)
     in
     let reactivate () =
       match get_status serverid with None -> Lwt.return_unit | Some status ->
-      Lwt_log.ign_notice_f ~section
-        "reactivating healthy server %s" (show serverid);
+      Logs.info ~src:section (fun m ->
+        m "reactivating healthy server %s" (show serverid));
       Hashtbl.replace servers serverid {status with suspended = false};
       for _ = status.current to status.desired - 1 do
         Resource_pool.add ~omit_max_check:true server_pool connection_pool;
@@ -182,7 +187,7 @@ module Make (Conf : CONF) = struct
     let serverid = connection_pool.serverid in
     match get_status serverid with None -> () | Some status ->
     if status.essential || status.suspended then () else begin
-      Lwt_log.ign_warning_f ~section "suspending %s" (show serverid);
+      Logs.warn ~src:section (fun m -> m "suspending %s" (show serverid));
       Hashtbl.replace servers serverid {status with suspended = true};
       Lwt.async @@ fun () ->
         Resource_pool.clear connection_pool.connections >>= fun () ->
@@ -201,27 +206,30 @@ module Make (Conf : CONF) = struct
       let {serverid; connections} = connection_pool in
       match get_status serverid with
       | None ->
-          Lwt_log.info_f ~section "cannot use %s (removed)" (show serverid)
+          Logs_lwt.info ~src:section
+            (fun m -> m "cannot use %s (removed)" (show serverid))
           >>= fun () ->
           Lwt.fail Resource_pool.(Resource_invalid {safe = true})
       | Some {suspended = true} ->
-          Lwt_log.info_f ~section "not using %s (suspended)" (show serverid)
+          Logs_lwt.info ~src:section
+            (fun m -> m "not using %s (suspended)" (show serverid))
           >>= fun () ->
           Lwt.fail Resource_pool.(Resource_invalid {safe = true})
       | Some {check_server} ->
-        Lwt_log.debug_f ~section "using connection to %s" (show serverid)
+        Logs_lwt.debug ~src:section
+          (fun m -> m "using connection to %s" (show serverid))
         >>= fun () ->
         Lwt.catch
           (fun () -> Resource_pool.use ?usage_attempts connections f)
           (fun e -> match e with
              | Resource_pool.(Resource_invalid {safe = true}) ->
-                 Lwt_log.warning
-                   "connection unusable (safe to retry using another server)"
+                 Logs_lwt.warn ~src:section (fun m ->
+                   m "connection unusable (safe to retry using another server)")
                  >>= fun () ->
                  Lwt.fail e
              | Resource_pool.(Resource_invalid {safe = false}) ->
-                 Lwt_log.warning
-                   "connection unusable (unsafe to retry using another server)"
+                 Logs_lwt.warn ~src:section (fun m ->
+                   m "connection unusable (unsafe to retry using another server)")
                  >>= fun () ->
                  suspend_server ~check_server connection_pool;
                  Lwt.fail e
