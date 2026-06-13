@@ -17,7 +17,7 @@ considered dysfunctional which leads to the following measures:
   from the server and it will be used again.
 *)
 
-val section : Lwt_log.section
+val section : Logs.src
 
 module type CONF = sig
   type connection
